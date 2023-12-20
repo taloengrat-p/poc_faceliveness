@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "320335180755",
+    "project_id": "face-liveness-8031f",
+    "storage_bucket": "face-liveness-8031f.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:320335180755:android:872f74137a7f50ed11b526",
+        "android_client_info": {
+          "package_name": "com.example.poc_faceliveness_ml"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyChruVSoGALqcW8mHHcFsxJ2wBU-zh4Om0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

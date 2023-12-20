@@ -2,6 +2,7 @@ import 'dart:developer';
 import 'dart:typed_data';
 
 import 'package:camera/camera.dart';
+import 'package:firebase_ml_vision/firebase_ml_vision.dart';
 // import 'package:firebase_ml_vision/firebase_ml_vision.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
@@ -25,7 +26,7 @@ class _CameraScreenState extends State<CameraScreen> {
     'left': null,
     'right': null,
   };
-  // final FaceDetector _faceDetector = FirebaseVision.instance.faceDetector(FaceDetectorOptions(enableLandmarks: true));
+  final FaceDetector _faceDetector = FirebaseVision.instance.faceDetector(FaceDetectorOptions(enableLandmarks: true));
 
   @override
   void initState() {
