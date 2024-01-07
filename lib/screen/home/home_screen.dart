@@ -58,7 +58,11 @@ class _MyHomePageState extends State<MyHomePage> {
           onPressed: () {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => CameraScreen()),
+              MaterialPageRoute(
+                builder: (context) => const CameraScreen(
+                  rectPrefer: Rect.fromLTRB(75, 150, 385, 460),
+                ),
+              ),
             );
           },
           icon: Container(

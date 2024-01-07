@@ -4,11 +4,13 @@ class FaceDetectionShapeBorder extends ShapeBorder {
   final Size cutoutSize;
   final double borderWidth;
   final double borderRadius;
+  final Color strokeColor;
 
   FaceDetectionShapeBorder({
     required this.cutoutSize,
     this.borderWidth = 2.0,
     this.borderRadius = 10.0,
+    this.strokeColor = Colors.white,
   });
 
   @override
@@ -25,14 +27,16 @@ class FaceDetectionShapeBorder extends ShapeBorder {
       PathOperation.difference,
       Path()..addRect(rect),
       Path()
-        ..addRRect(RRect.fromRectAndRadius(
-          Rect.fromCenter(
-            center: rect.center,
-            width: cutoutSize.width,
-            height: cutoutSize.height,
+        ..addRRect(
+          RRect.fromRectAndRadius(
+            Rect.fromCenter(
+              center: rect.center,
+              width: cutoutSize.width,
+              height: cutoutSize.height,
+            ),
+            const Radius.circular(180),
           ),
-          Radius.circular(180),
-        )),
+        ),
     );
   }
 
@@ -54,7 +58,7 @@ class FaceDetectionShapeBorder extends ShapeBorder {
     canvas.drawRRect(rrect, paint);
 
     final Paint borderPaint = Paint()
-      ..color = Colors.white
+      ..color = strokeColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = borderWidth;
 

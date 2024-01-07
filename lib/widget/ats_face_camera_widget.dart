@@ -1,14 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as develop;
+import 'package:image/image.dart' as imglib;
 import 'dart:io';
 import 'package:camera/camera.dart';
-// import 'package:firebase_ml_vision/firebase_ml_vision.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
-import 'package:image/image.dart' as imglib;
-import 'package:poc_faceliveness_ml/screen/image_capture/image_capture_screen.dart';
-import 'package:poc_faceliveness_ml/widget/ats_face_camera_widget.dart';
+import 'package:poc_faceliveness_ml/widget/ats_face_area_frame_widget.dart';
 
 enum CaptureState { PREPARE, CAPTURING, WAIT }
 
@@ -19,22 +17,45 @@ enum FaceClassification {
   BOTTOM,
   FRONT,
   SMILING,
-  NONE;
+  NONE,
+  FACE_NOT_DETECTED,
+  TOO_FAR;
 }
 
-class CameraScreen extends StatefulWidget {
-  final Rect rectPrefer;
+class AtsFaceCameraWidget extends StatefulWidget {
+  final Rect rectInPrefer;
+  final Rect rectOutPrefer;
+  final FaceClassification faceClassificationTarget;
+  final Function(FaceClassification faceClassification, Image value)? onSuccess;
+  final Function(int? value)? onCountdownChange;
+  final Function(FaceClassification)? onFaceEventUpdate;
+  final int countDownNumber;
+  final bool isDebug;
+  final Color backgroundColor;
+  final Color strokeColorReadyState;
+  final Color strokeColorNotReadyState;
 
-  const CameraScreen({
+  const AtsFaceCameraWidget({
     super.key,
-    required this.rectPrefer,
+    required this.rectInPrefer,
+    required this.rectOutPrefer,
+    required this.faceClassificationTarget,
+    this.onSuccess,
+    required this.countDownNumber,
+    this.isDebug = false,
+    this.backgroundColor = Colors.white,
+    this.strokeColorReadyState = const Color(0xFF38939B),
+    this.strokeColorNotReadyState = const Color(0xFFEC4B55),
+    this.onCountdownChange,
+    this.onFaceEventUpdate,
   });
 
   @override
-  _CameraScreenState createState() => _CameraScreenState();
+  _AtsFaceCameraWidgetState createState() => _AtsFaceCameraWidgetState();
 }
 
-class _CameraScreenState extends State<CameraScreen> {
+class _AtsFaceCameraWidgetState extends State<AtsFaceCameraWidget> {
+  final String TAG = 'AtsFaceCameraWidget';
   late CameraController _controller;
   Future<void>? _initializeControllerFuture;
   late List<CameraDescription> cameras;
@@ -47,14 +68,7 @@ class _CameraScreenState extends State<CameraScreen> {
   CaptureState captureState = CaptureState.WAIT;
   Timer? _timer;
   Set<FaceClassification> livenessDetectedSets = {};
-  int _captureCounter = 0;
-  int _captureCounterPrefer = 4;
-
-  Map<String, Image?> images = {
-    FaceClassification.FRONT.name: null,
-    FaceClassification.LEFT.name: null,
-    FaceClassification.RIGHT.name: null,
-  };
+  int _captureCounter = 3;
 
   final _orientations = {
     DeviceOrientation.portraitUp: 0,
@@ -68,15 +82,30 @@ class _CameraScreenState extends State<CameraScreen> {
     options: FaceDetectorOptions(enableClassification: true, enableTracking: true),
   );
 
-  bool get isValidBeforeCaptureImage => captureState == CaptureState.PREPARE;
+  bool get isValidBeforeCaptureImage =>
+      captureState == CaptureState.PREPARE &&
+      livenessDetectedSets.contains(widget.faceClassificationTarget) &&
+      livenessDetectedSets.length == 1;
 
   get currentOnlySingleFaceState => livenessDetectedSets.length == 1 ? livenessDetectedSets.first : null;
 
   bool get isVisibleCounterText => _captureCounter != 0 && _captureCounter != _captureCounterPrefer;
 
+  int get _captureCounterPrefer => widget.countDownNumber + 1;
+
+  @override
+  void dispose() {
+    _initializeControllerFuture = null;
+    doStopTimer();
+    _controller.stopImageStream();
+    _controller.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
+    _captureCounter = widget.countDownNumber;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       initializeCamera();
     });
@@ -112,20 +141,6 @@ class _CameraScreenState extends State<CameraScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      top: false,
-      bottom: true,
-      child: Scaffold(
-        appBar: AppBar(title: const Text('Face Liveness')),
-        // body: AtsFaceCameraWidget(
-        //   rectPrefer: Rect.fromLTRB(75, 150, 385, 460),
-        // ),
-      ),
-    );
-  }
-
   Future<void> processCameraImage(
     CameraImage cameraImage,
   ) async {
@@ -138,10 +153,23 @@ class _CameraScreenState extends State<CameraScreen> {
 
     final List<Face> faces = await _faceDetector.processImage(inputImage);
 
+    if (faces.isEmpty) {
+      widget.onFaceEventUpdate?.call(FaceClassification.FACE_NOT_DETECTED);
+      livenessDetectedSets.clear();
+      return;
+    }
+    // develop.log(faces.toString(), name: TAG);
     for (Face face in faces) {
       final Rect boundingBox = face.boundingBox;
 
-      CaptureState currentCaptureState = doUpdateCaptureState(boundingBox);
+      final isInBound = isInBoundary(boundingBox);
+      final isOutBound = isOutBoundary(boundingBox);
+
+      if (isInBound && isOutBound) {
+        widget.onFaceEventUpdate?.call(FaceClassification.TOO_FAR);
+      }
+
+      doUpdateCaptureState(boundingBox);
       doUpdateAllRot(face);
       doUpdateClassification(face);
       doUpdateFacePropInfo(boundingBox, face);
@@ -253,11 +281,11 @@ class _CameraScreenState extends State<CameraScreen> {
 
   Color getStrokeColor() {
     if (captureState == CaptureState.PREPARE) {
-      return Colors.green;
+      return widget.strokeColorReadyState;
     } else if (captureState == CaptureState.CAPTURING) {
-      return Colors.green;
+      return widget.strokeColorReadyState;
     } else {
-      return Colors.white;
+      return widget.strokeColorNotReadyState;
     }
   }
 
@@ -267,53 +295,9 @@ class _CameraScreenState extends State<CameraScreen> {
       return;
     }
 
-    if (images[faceClassification.name] != null) {
-      return;
-    }
-
     Image image = await _convertXFileToImage();
 
-    // File file = await convertImagetoPng(cameraImage);
-    // Image image = Image.file(file);
-
-    switch (faceClassification) {
-      case FaceClassification.LEFT:
-        if (images[FaceClassification.LEFT.name] == null) {
-          images[FaceClassification.LEFT.name] = image;
-        }
-        break;
-      case FaceClassification.FRONT:
-        if (images[FaceClassification.FRONT.name] == null) {
-          images[FaceClassification.FRONT.name] = image;
-        }
-        break;
-      case FaceClassification.RIGHT:
-        if (images[FaceClassification.RIGHT.name] == null) {
-          images[FaceClassification.RIGHT.name] = image;
-        }
-        break;
-      default:
-    }
-
-    if (images[FaceClassification.LEFT.name] != null &&
-        images[FaceClassification.RIGHT.name] != null &&
-        images[FaceClassification.FRONT.name] != null) {
-      _controller.stopImageStream();
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => ImageCaptureScreen(
-            images: images,
-          ),
-        ),
-      );
-
-      images = {
-        'FRONT': null,
-        'LEFT': null,
-        'RIGHT': null,
-      };
-    }
+    widget.onSuccess?.call(widget.faceClassificationTarget, image);
   }
 
   Future<Image> _convertXFileToImage() async {
@@ -323,9 +307,20 @@ class _CameraScreenState extends State<CameraScreen> {
     return image;
   }
 
+  bool isInBoundary(Rect boundingBox) {
+    return (widget.rectInPrefer.contains(boundingBox.topLeft) &&
+            widget.rectInPrefer.contains(boundingBox.bottomRight)) ||
+        widget.rectInPrefer.contains(boundingBox.topRight) && widget.rectInPrefer.contains(boundingBox.bottomLeft);
+  }
+
+  bool isOutBoundary(Rect boundingBox) {
+    return (!widget.rectOutPrefer.contains(boundingBox.topLeft) &&
+            !widget.rectOutPrefer.contains(boundingBox.bottomRight)) ||
+        !widget.rectOutPrefer.contains(boundingBox.topRight) && !widget.rectOutPrefer.contains(boundingBox.bottomLeft);
+  }
+
   CaptureState doUpdateCaptureState(Rect boundingBox) {
-    if ((widget.rectPrefer.contains(boundingBox.topLeft) && widget.rectPrefer.contains(boundingBox.bottomRight)) ||
-        widget.rectPrefer.contains(boundingBox.topRight) && widget.rectPrefer.contains(boundingBox.bottomLeft)) {
+    if (isInBoundary(boundingBox) && isOutBoundary(boundingBox)) {
       captureState = CaptureState.PREPARE;
     } else {
       captureState = CaptureState.WAIT;
@@ -415,7 +410,7 @@ smileProb: $smileProb''';
 
   void doStartCounterSaveImage(
       FaceClassification currentOnlySingleFaceState, CameraImage cameraImage, InputImage inputImage) async {
-    if (_timer != null || images[currentOnlySingleFaceState.name] != null) {
+    if (_timer != null) {
       if (!isValidBeforeCaptureImage) {
         doStopTimer();
       }
@@ -424,20 +419,23 @@ smileProb: $smileProb''';
     }
 
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) async {
-      _captureCounter++;
-
-      if (_captureCounter >= _captureCounterPrefer) {
+      if (_captureCounter > 0) {
+        _captureCounter--;
+        widget.onCountdownChange?.call(_captureCounter);
+      } else {
         await onSaveImage(currentOnlySingleFaceState, cameraImage, inputImage);
         doStopTimer();
-        setState(() {});
       }
+
+      setState(() {});
     });
   }
 
   doStopTimer() {
-    _captureCounter = 0;
+    _captureCounter = widget.countDownNumber + 1;
     _timer?.cancel();
     _timer = null;
+    widget.onCountdownChange?.call(null);
   }
 
   Future<File> convertImagetoPng(CameraImage cameraImage) async {
@@ -455,5 +453,92 @@ smileProb: $smileProb''';
     final png = imglib.encodePng(image);
     // Write the PNG formatted data to a file.
     return await File('image.png').writeAsBytes(png);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      bottom: true,
+      child: FutureBuilder(
+        future: _initializeControllerFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.done) {
+            return Stack(
+              children: [
+                Container(
+                  width: MediaQuery.of(context).size.width,
+                  height: MediaQuery.of(context).size.height,
+                  child: AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: CameraPreview(
+                      _controller,
+                      child: Center(
+                        child: AtsFaceAreaFrameWidget(
+                          backgroundColor: widget.backgroundColor,
+                          strokeColor: getStrokeColor(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Visibility(
+                  visible: widget.isDebug,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      color: Colors.white,
+                      child: Text(rotState),
+                    ),
+                  ),
+                ),
+                Visibility(
+                  visible: livenessDetectedSets.isNotEmpty && widget.isDebug,
+                  child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                      margin: const EdgeInsets.only(top: 12),
+                      padding: const EdgeInsets.all(10),
+                      color: Colors.white,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            livenessDetectedSets.map((e) => '${e.name} ').toString(),
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 32,
+                            ),
+                          ),
+                          Visibility(
+                            visible: isVisibleCounterText,
+                            child: Container(
+                              margin: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                (_captureCounter).toString(),
+                                style: const TextStyle(
+                                  color: Colors.amber,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 32,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+              ],
+            );
+          } else {
+            // Otherwise, display a loading indicator.
+            return const Center(child: CircularProgressIndicator.adaptive());
+          }
+        },
+      ),
+    );
   }
 }

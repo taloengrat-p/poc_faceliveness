@@ -30,28 +30,29 @@ class _ImageCaptureScreenState extends State<ImageCaptureScreen> {
     return Scaffold(
       body: ListView(
         scrollDirection: Axis.horizontal,
-        children: widget.images.values
+        children: widget.images.entries
             .map((e) => Container(
                   width: MediaQuery.of(context).size.width,
                   height: MediaQuery.of(context).size.height,
-                  child: e,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SafeArea(
+                        child: Text(
+                          e.key,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 32,
+                          ),
+                        ),
+                      ),
+                      e.value!,
+                    ],
+                  ),
                 ))
             .toList(),
       ),
     );
-  }
-
-  List<Image> convertCameraImageToImage(List<CameraImage> cameraImages) {
-    return cameraImages.map((e) {
-      ByteData byteData = ByteData.sublistView(e.planes[0].bytes);
-
-      // Convert ByteData to Uint8List
-      Uint8List imageData = byteData.buffer.asUint8List();
-
-      // Create an Image from the Uint8List
-      Image image = Image.memory(imageData);
-
-      return image;
-    }).toList();
   }
 }

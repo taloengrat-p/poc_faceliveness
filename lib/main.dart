@@ -4,6 +4,7 @@ import 'package:poc_faceliveness_ml/firebase_options.dart';
 import 'package:poc_faceliveness_ml/screen/home/home_screen.dart';
 
 void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -37,7 +38,7 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Face Liveness'),
+      home: const MyHomePage(title: 'WOLZARM Flutter Face Liveness'),
     );
   }
 }
